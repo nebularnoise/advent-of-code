@@ -38,7 +38,11 @@ fn find_digits_in(line: &str) -> Vec<(usize, usize)> {
         .collect();
 
     let indices_of_normal_digits: Vec<(usize, usize)> = (1..=9)
-        .filter_map(|digit| line.find(&digit.to_string()).map(|index| (index, digit)))
+        .flat_map(|digit| {
+            line.match_indices(&digit.to_string())
+                .map(move |(index, _)| (index, digit))
+                .collect::<Vec<_>>()
+        })
         .collect();
 
     let mut all_digits_with_indices =
