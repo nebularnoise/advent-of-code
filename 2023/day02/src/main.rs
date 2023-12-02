@@ -17,19 +17,24 @@ fn main() {
         blue: 14,
     };
     if let Ok(lines) = read_lines("./input.txt") {
-        let sum: usize = lines
+        let (sum_of_ids, sum_of_powers): (usize, usize) = lines
             .map(|line| {
                 line.map_or(
                     //
-                    0,
+                    (0, 0),
                     |l| {
-                        parse_game(&l)
-                            .map_or(0, |(_, g)| if g.possible_given(&bag) { g.id.0 } else { 0 })
+                        parse_game(&l).map_or((0, 0), |(_, g)| {
+                            (
+                                if g.possible_given(&bag) { g.id.0 } else { 0 },
+                                minimum_bag(&g).power(),
+                            )
+                        })
                     },
                 )
             })
-            .sum();
-        println!("{}", sum);
+            .fold((0, 0), |acc, tup| (acc.0 + tup.0, acc.1 + tup.1));
+        println!("Pt1. Sum of all possible games: {}", sum_of_ids);
+        println!("Pt2. Sum of all powers of minimum bags: {}", sum_of_powers);
     }
 }
 
@@ -100,6 +105,12 @@ impl Game {
     }
 }
 
+impl Bag {
+    fn power(&self) -> usize {
+        self.red * self.green * self.blue
+    }
+}
+
 #[derive(Debug, PartialEq)]
 enum BunchOfCubes {
     Red(usize),
@@ -152,6 +163,18 @@ fn parse_game(input: &str) -> IResult<&str, Game> {
             handfuls: vec,
         },
     ))
+}
+
+fn minimum_bag(game: &Game) -> Bag {
+    let min_red = game.handfuls.iter().map(|h| h.red).max().unwrap();
+    let min_green = game.handfuls.iter().map(|h| h.green).max().unwrap();
+    let min_blue = game.handfuls.iter().map(|h| h.blue).max().unwrap();
+
+    Bag {
+        red: min_red,
+        green: min_green,
+        blue: min_blue,
+    }
 }
 
 #[cfg(test)]
@@ -276,5 +299,36 @@ mod tests {
                 }
             ))
         );
+    }
+
+    #[test]
+    fn minbag() {
+        assert_eq!(
+            minimum_bag(&Game {
+                id: GameId(1),
+                handfuls: vec![
+                    Handful {
+                        red: 4,
+                        green: 0,
+                        blue: 3
+                    },
+                    Handful {
+                        red: 1,
+                        green: 2,
+                        blue: 6
+                    },
+                    Handful {
+                        red: 0,
+                        green: 2,
+                        blue: 0
+                    }
+                ]
+            }),
+            Bag {
+                red: 4,
+                green: 2,
+                blue: 6
+            }
+        )
     }
 }
