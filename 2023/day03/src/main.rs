@@ -8,16 +8,16 @@ use nom::character::complete::{anychar, digit1};
 use nom::combinator::map_res;
 use nom::multi::{many0, many1_count};
 use nom::IResult;
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 
 const MAX_XY: usize = 139;
 
-type NumberStore = BTreeMap<XBoundingBox, usize>;
+type NumberStore = HashMap<XBoundingBox, usize>;
 
 fn main() {
     let lines = read_lines("./input.txt").unwrap();
 
-    let mut numbers: NumberStore = BTreeMap::new();
+    let mut numbers: NumberStore = NumberStore::new();
     let mut symbols: Vec<(Point, char)> = Vec::new();
 
     for (y, line) in lines.enumerate() {
@@ -34,10 +34,10 @@ fn main() {
         }
     }
 
-    let mut numbers_to_add_up: NumberStore = BTreeMap::new();
+    let mut numbers_to_add_up: NumberStore = NumberStore::new();
     let mut gear_ratios_sum = 0;
     for p in symbols {
-        let mut adjacent_numbers: NumberStore = BTreeMap::new();
+        let mut adjacent_numbers: NumberStore = NumberStore::new();
         for neigh in p.0.neighbours() {
             for (bb, val) in &numbers {
                 if bb.contains(&neigh) {
@@ -49,11 +49,11 @@ fn main() {
             let gear_ratio = adjacent_numbers.iter().fold(1, |acc, el| acc * el.1);
             gear_ratios_sum += gear_ratio;
         }
-        numbers_to_add_up.append(&mut adjacent_numbers);
+        numbers_to_add_up.extend(adjacent_numbers.drain());
     }
 
     let sum: usize = numbers_to_add_up.iter().map(|(_k, v)| v).sum();
-    println!("Pt1: sum of all numbers neghbouring symbols : {}", sum);
+    println!("Pt1: sum of all numbers neighbouring symbols : {}", sum);
     println!("Pt2: sum of all gear ratios : {}", gear_ratios_sum);
 }
 
@@ -65,7 +65,7 @@ where
     Ok(io::BufReader::new(file).lines())
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, PartialEq, Eq)]
 struct Point {
     y: usize,
     x: usize,
@@ -140,7 +140,7 @@ impl Point {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 struct XBoundingBox {
     y: usize,
     x: (usize, usize),
@@ -152,7 +152,7 @@ impl XBoundingBox {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, PartialEq, Eq)]
 enum SchematicEntity {
     Number {
         value: usize,
@@ -161,7 +161,7 @@ enum SchematicEntity {
     Symbol(Point, char),
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, PartialEq, Eq)]
 enum LineEntity {
     Spacing(usize),
     Number(usize),
