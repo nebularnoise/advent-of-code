@@ -12,11 +12,13 @@ use std::collections::BTreeMap;
 
 const MAX_XY: usize = 139;
 
+type NumberStore = BTreeMap<XBoundingBox, usize>;
+
 fn main() {
     let lines = read_lines("./input.txt").unwrap();
 
-    let mut numbers: BTreeMap<XBoundingBox, usize> = BTreeMap::new();
-    let mut symbols: Vec<Point> = Vec::new();
+    let mut numbers: NumberStore = BTreeMap::new();
+    let mut symbols: Vec<(Point, char)> = Vec::new();
 
     for (y, line) in lines.enumerate() {
         for entity in process_schematic_line(y, parse_line(&line.unwrap()).unwrap().1) {
@@ -27,24 +29,32 @@ fn main() {
                 } => {
                     numbers.insert(bounding_box, value);
                 }
-                SchematicEntity::Symbol(p) => symbols.push(p),
+                SchematicEntity::Symbol(p, c) => symbols.push((p, c)),
             }
         }
     }
 
-    let mut numbers_to_add_up: BTreeMap<XBoundingBox, usize> = BTreeMap::new();
+    let mut numbers_to_add_up: NumberStore = BTreeMap::new();
+    let mut gear_ratios_sum = 0;
     for p in symbols {
-        for neigh in p.neighbours() {
+        let mut adjacent_numbers: NumberStore = BTreeMap::new();
+        for neigh in p.0.neighbours() {
             for (bb, val) in &numbers {
                 if bb.contains(&neigh) {
-                    numbers_to_add_up.insert(bb.clone(), *val);
+                    adjacent_numbers.insert(bb.clone(), *val);
                 }
             }
         }
+        if p.1 == '*' && adjacent_numbers.len() == 2 {
+            let gear_ratio = adjacent_numbers.iter().fold(1, |acc, el| acc * el.1);
+            gear_ratios_sum += gear_ratio;
+        }
+        numbers_to_add_up.append(&mut adjacent_numbers);
     }
 
     let sum: usize = numbers_to_add_up.iter().map(|(_k, v)| v).sum();
-    println!("Pt1: sum of all numbers neghbouring symbols : {}", sum)
+    println!("Pt1: sum of all numbers neghbouring symbols : {}", sum);
+    println!("Pt2: sum of all gear ratios : {}", gear_ratios_sum);
 }
 
 fn read_lines<P>(filename: P) -> io::Result<io::Lines<io::BufReader<File>>>
@@ -148,14 +158,14 @@ enum SchematicEntity {
         value: usize,
         bounding_box: XBoundingBox,
     },
-    Symbol(Point),
+    Symbol(Point, char),
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum LineEntity {
     Spacing(usize),
     Number(usize),
-    Symbol,
+    Symbol(char),
 }
 
 fn parse_spacing(input: &str) -> IResult<&str, LineEntity> {
@@ -165,7 +175,7 @@ fn parse_number(input: &str) -> IResult<&str, LineEntity> {
     map_res(digit1, str::parse::<usize>)(input).map(|(rest, n)| (rest, LineEntity::Number(n)))
 }
 fn parse_symbol(input: &str) -> IResult<&str, LineEntity> {
-    anychar(input).map(|(rest, _)| (rest, LineEntity::Symbol))
+    anychar(input).map(|(rest, c)| (rest, LineEntity::Symbol(c)))
 }
 
 fn parse_line(input: &str) -> IResult<&str, Vec<LineEntity>> {
@@ -190,11 +200,14 @@ fn process_schematic_line(line_y: usize, parsed_line: Vec<LineEntity>) -> Vec<Sc
                 running_x += width;
             }
             LineEntity::Spacing(n) => running_x += n,
-            LineEntity::Symbol => {
-                entities.push(SchematicEntity::Symbol(Point {
-                    y: line_y,
-                    x: running_x,
-                }));
+            LineEntity::Symbol(c) => {
+                entities.push(SchematicEntity::Symbol(
+                    Point {
+                        y: line_y,
+                        x: running_x,
+                    },
+                    c,
+                ));
                 running_x += 1;
             }
         }
@@ -234,7 +247,7 @@ mod tests {
                     LineEntity::Spacing(2),
                     LineEntity::Number(10),
                     LineEntity::Spacing(4),
-                    LineEntity::Symbol
+                    LineEntity::Symbol('$')
                 ]
             ))
         );
@@ -253,7 +266,7 @@ mod tests {
                     value: 10,
                     bounding_box: XBoundingBox { y: 0, x: (4, 5) }
                 },
-                SchematicEntity::Symbol(Point { y: 0, x: 10 })
+                SchematicEntity::Symbol(Point { y: 0, x: 10 }, '$')
             ]
         );
     }
