@@ -10,6 +10,7 @@ use nom::combinator::map_res;
 use nom::multi::separated_list1;
 use nom::sequence::{delimited, separated_pair, tuple};
 use nom::IResult;
+
 use std::ops::Range;
 
 fn main() {
@@ -22,6 +23,9 @@ fn main() {
     let winning_cards: SetOfCards = cards.into();
     let points: u32 = winning_cards.points();
     println!("Pt1 - Sum of all points : {}", points);
+
+    let winnings = full_winnings_of_set(&winning_cards);
+    println!("Pt2 - Final amount of scratch cards after winnings : {}", winnings);
 }
 
 fn read_lines<P>(filename: P) -> io::Result<io::Lines<io::BufReader<File>>>
@@ -60,6 +64,39 @@ impl SetOfCards {
             .map(|(_n, p)| p.0.clone().count() as u32)
             .sum()
     }
+}
+
+fn full_winnings_of_single_card(set: &SetOfCards, cache: &mut HashMap<u16, u32>, n: u16) -> u32 {
+    match cache.get(&n).map(|entry| entry.clone()) {
+        Some(val) => val,
+        None => {
+            if let Some(prize) = set.winning_cards.get(&n) {
+                let winnings = prize
+                    .0
+                    .clone()
+                    .map(|k| 1 + full_winnings_of_single_card(set, cache, k))
+                    .sum();
+                cache.insert(n, winnings);
+                return winnings;
+            } else {
+                cache.insert(n, 0);
+                return 0;
+            }
+        }
+    }
+}
+
+fn full_winnings_of_set(set: &SetOfCards) -> u32 {
+    let mut cache: HashMap<u16, u32> = HashMap::new();
+    let full_wins = set
+        .winning_cards
+        .iter()
+        .fold((&mut cache, 0 as u32), |(c, winnings), card| {
+            let wins = full_winnings_of_single_card(set, c, *card.0);
+            (c, winnings + wins)
+        })
+        .1;
+    full_wins
 }
 
 impl From<Vec<Card>> for SetOfCards {
