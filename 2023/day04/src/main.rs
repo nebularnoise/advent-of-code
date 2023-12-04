@@ -25,7 +25,10 @@ fn main() {
     println!("Pt1 - Sum of all points : {}", points);
 
     let winnings = full_winnings_of_set(&winning_cards);
-    println!("Pt2 - Final amount of scratch cards after winnings : {}", winnings);
+    println!(
+        "Pt2 - Final amount of scratch cards after winnings : {}",
+        winnings
+    );
 }
 
 fn read_lines<P>(filename: P) -> io::Result<io::Lines<io::BufReader<File>>>
@@ -54,14 +57,15 @@ fn parse_number_list(input: &str) -> IResult<&str, Vec<u8>> {
 
 #[derive(Debug)]
 struct SetOfCards {
-    winning_cards: HashMap<u16, Prize>,
+    full_set_size: u16,
+    winning_cards: HashMap<u16, CardStats>,
 }
 
 impl SetOfCards {
     fn points(&self) -> u32 {
         self.winning_cards
             .iter()
-            .map(|(_n, p)| p.0.clone().count() as u32)
+            .map(|(_n, p)| p.points() as u32)
             .sum()
     }
 }
@@ -70,10 +74,9 @@ fn full_winnings_of_single_card(set: &SetOfCards, cache: &mut HashMap<u16, u32>,
     match cache.get(&n).map(|entry| entry.clone()) {
         Some(val) => val,
         None => {
-            if let Some(prize) = set.winning_cards.get(&n) {
-                let winnings = prize
-                    .0
-                    .clone()
+            if let Some(card) = set.winning_cards.get(&n) {
+                let winnings = card
+                    .prize()
                     .map(|k| 1 + full_winnings_of_single_card(set, cache, k))
                     .sum();
                 cache.insert(n, winnings);
@@ -96,16 +99,18 @@ fn full_winnings_of_set(set: &SetOfCards) -> u32 {
             (c, winnings + wins)
         })
         .1;
-    full_wins
+    full_wins + set.full_set_size as u32
 }
 
 impl From<Vec<Card>> for SetOfCards {
     fn from(cards: Vec<Card>) -> Self {
         SetOfCards {
+            full_set_size: cards.len() as u16,
             winning_cards: cards
                 .into_iter()
-                .map(|c| (c.number, c.prize()))
-                .filter(|(_n, p)| !p.0.is_empty())
+                .map(|c| -> CardStats { c.into() })
+                .filter(|c| c.number_of_matching_cards != 0)
+                .map(|c| (c.number, c))
                 .collect(),
         }
     }
@@ -118,9 +123,6 @@ struct Card {
     numbers_you_have: Vec<u8>,
 }
 
-#[derive(Debug)]
-struct Prize(Range<u16>);
-
 impl From<(u16, (Vec<u8>, Vec<u8>))> for Card {
     fn from(item: (u16, (Vec<u8>, Vec<u8>))) -> Self {
         Card {
@@ -130,20 +132,36 @@ impl From<(u16, (Vec<u8>, Vec<u8>))> for Card {
         }
     }
 }
-impl Card {
+
+#[derive(PartialEq, Debug)]
+struct CardStats {
+    number: u16,
+    number_of_matching_cards: u16,
+}
+
+impl From<Card> for CardStats {
+    fn from(item: Card) -> Self {
+        CardStats {
+            number: item.number,
+            number_of_matching_cards: item
+                .winning_numbers
+                .intersect(item.numbers_you_have.clone())
+                .len() as u16,
+        }
+    }
+}
+
+impl CardStats {
     fn points(&self) -> u16 {
-        let matching_numbers = self
-            .winning_numbers
-            .intersect(self.numbers_you_have.clone())
-            .len();
+        let matching_numbers = self.number_of_matching_cards;
         if matching_numbers == 0 {
             return 0;
         }
         1 << (matching_numbers - 1)
     }
 
-    fn prize(&self) -> Prize {
-        Prize(self.number..(self.number + self.points()))
+    fn prize(&self) -> Range<u16> {
+        self.number + 1..(self.number + 1 + self.number_of_matching_cards)
     }
 }
 
