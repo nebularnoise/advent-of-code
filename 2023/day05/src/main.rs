@@ -7,8 +7,17 @@ use nom::multi::{many1, separated_list1};
 use nom::sequence::{delimited, preceded, separated_pair, terminated, tuple};
 use nom::IResult;
 
+use core::cmp::{max, min};
 use core::ops::Range;
+
 use itertools::Itertools;
+
+fn intersect<N>(a: &Range<N>, b: &Range<N>) -> Range<N>
+where
+    N: Ord + Copy,
+{
+    max(a.start, b.start)..min(a.end, b.end)
+}
 
 fn main() {
     let real_input = std::fs::read_to_string("./input.txt").unwrap();
@@ -22,10 +31,11 @@ fn main() {
     );
 
     let seeds = reinterpret_seed_list_as_ranges(seeds);
-    let locations_pt2 = almanac.location_of_seeds(seeds.into_iter().flatten().collect());
+    let locations_pt2 = almanac.range_of_locations_of_seeds(seeds);
+    let min_location = locations_pt2.iter().min_by_key(|r| r.start).unwrap().start;
     println!(
         "Pt2 - Lowest location number for a seed to plant: {}",
-        locations_pt2.iter().min().unwrap()
+        min_location
     );
 }
 
@@ -54,11 +64,44 @@ impl MapEntry {
             return None;
         }
 
+        Some(self.remap_impl(&n))
+    }
+
+    fn remap_impl(&self, n: &usize) -> usize {
         if self.destination_range_start > self.source_range_start {
-            return Some(n + (self.destination_range_start - self.source_range_start));
+            return n + (self.destination_range_start - self.source_range_start);
         } else {
-            return Some(n - (self.source_range_start - self.destination_range_start));
+            return n - (self.source_range_start - self.destination_range_start);
         }
+    }
+
+    fn remap_range(&self, r: Range<usize>) -> Option<(Range<usize>, Vec<Range<usize>>)> {
+        let remapped = intersect(&r, &self.source_range());
+        if remapped.is_empty() {
+            return None;
+        }
+        let remapped = self.remap_impl(&remapped.start)..self.remap_impl(&remapped.end);
+        let mut rest = vec![];
+
+        let ensure_not_empty = |r: Range<usize>| -> Option<Range<usize>> {
+            if r.is_empty() {
+                None
+            } else {
+                Some(r)
+            }
+        };
+
+        if let Some(head) = ensure_not_empty(
+            min(r.start, self.source_range_start)..min(r.end, self.source_range_start),
+        ) {
+            rest.push(head);
+        }
+        if let Some(tail) =
+            ensure_not_empty(max(self.source_range_start + self.range_size, r.start)..r.end)
+        {
+            rest.push(tail);
+        }
+        Some((remapped, rest))
     }
 }
 
@@ -73,6 +116,22 @@ impl<'a> Map<'a> {
     fn remap(&self, n: &usize) -> usize {
         self.entries.iter().find_map(|e| e.remap(n)).unwrap_or(*n)
     }
+
+    fn remap_range(&self, r: Range<usize>) -> Vec<Range<usize>> {
+        let mut to_process = vec![r];
+        let mut processed = vec![];
+        while let Some(r) = to_process.pop() {
+            if let Some((remapped, rest)) =
+                self.entries.iter().find_map(|e| e.remap_range(r.clone()))
+            {
+                processed.push(remapped);
+                to_process.extend(rest);
+            } else {
+                processed.push(r);
+            }
+        }
+        processed
+    }
 }
 
 #[derive(PartialEq, Debug)]
@@ -82,6 +141,12 @@ impl<'a> Almanac<'a> {
     fn location_of_seeds(&self, seeds: Vec<usize>) -> Vec<usize> {
         self.0.iter().fold(seeds, |acc, map| {
             acc.into_iter().map(|n| map.remap(&n)).collect()
+        })
+    }
+
+    fn range_of_locations_of_seeds(&self, seeds: Vec<Range<usize>>) -> Vec<Range<usize>> {
+        self.0.iter().fold(seeds, |acc, map| {
+            acc.into_iter().flat_map(|n| map.remap_range(n)).collect()
         })
     }
 }
@@ -163,6 +228,8 @@ fn parse_almanac(input: &str) -> IResult<&str, (Vec<usize>, Almanac)> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
     use crate::*;
     #[test]
     fn test_map_hearder_parser() {
@@ -325,5 +392,48 @@ mod tests {
 
         let seeds_pt2 = reinterpret_seed_list_as_ranges(seeds);
         assert_eq!(seeds_pt2.into_iter().flatten().count(), 27);
+    }
+
+    #[test]
+    fn remap_range() {
+        let entry = MapEntry {
+            source_range_start: 100,
+            destination_range_start: 1100,
+            range_size: 100,
+        };
+
+        assert_eq!(entry.remap_range(0..10), None);
+        assert_eq!(
+            entry.remap_range(0..150),
+            Some((1100..1150, vec![(0..100)]))
+        );
+        assert_eq!(entry.remap_range(150..160), Some((1150..1160, vec![])));
+        assert_eq!(
+            entry.remap_range(150..250),
+            Some((1150..1200, vec![200..250]))
+        );
+
+        let map = Map {
+            source_name: "",
+            destination_name: "",
+            entries: vec![
+                MapEntry {
+                    source_range_start: 100,
+                    destination_range_start: 1100,
+                    range_size: 100,
+                },
+                MapEntry {
+                    source_range_start: 300,
+                    destination_range_start: 100,
+                    range_size: 10,
+                },
+            ],
+        };
+        assert_eq!(
+            map.remap_range(0..1000).iter().collect::<HashSet<_>>(),
+            vec![0..100, 1100..1200, 200..300, 100..110, 310..1000]
+                .iter()
+                .collect::<HashSet<_>>()
+        );
     }
 }
