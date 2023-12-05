@@ -7,20 +7,44 @@ use nom::multi::{many1, separated_list1};
 use nom::sequence::{delimited, preceded, separated_pair, terminated, tuple};
 use nom::IResult;
 
+use core::ops::Range;
+
 fn main() {
     let real_input = std::fs::read_to_string("./input.txt").unwrap();
 
-    let almanac = parse_almanac(&real_input).unwrap().1;
-    for map in almanac.1 {
-        println!("{}\t->{}", map.source_name, map.destination_name);
-    }
+    let (seeds, almanac) = parse_almanac(&real_input).unwrap().1;
+
+    let fully_transformed = almanac.location_of_seeds(seeds);
+
+    println!(
+        "Pt1 - Lowest location number for a seed to plant: {}",
+        fully_transformed.iter().min().unwrap()
+    );
 }
 
 #[derive(Debug, PartialEq)]
 struct MapEntry {
-    destination_range_start: u32,
-    source_range_start: u32,
-    range_size: u32,
+    destination_range_start: usize,
+    source_range_start: usize,
+    range_size: usize,
+}
+
+impl MapEntry {
+    fn source_range(&self) -> Range<usize> {
+        self.source_range_start..self.source_range_start + self.range_size
+    }
+
+    fn remap(&self, n: &usize) -> Option<usize> {
+        if !self.source_range().contains(n) {
+            return None;
+        }
+
+        if self.destination_range_start > self.source_range_start {
+            return Some(n + (self.destination_range_start - self.source_range_start));
+        } else {
+            return Some(n - (self.source_range_start - self.destination_range_start));
+        }
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -28,6 +52,29 @@ struct Map<'a> {
     source_name: &'a str,
     destination_name: &'a str,
     entries: Vec<MapEntry>,
+}
+
+impl<'a> Map<'a> {
+    fn remap(&self, n: &usize) -> usize {
+        self.entries.iter().find_map(|e| e.remap(n)).unwrap_or(*n)
+    }
+}
+
+#[derive(PartialEq, Debug)]
+struct Almanac<'a>(Vec<Map<'a>>);
+
+impl<'a> Almanac<'a> {
+    fn location_of_seeds(&self, seeds: Vec<usize>) -> Vec<usize> {
+        self.0.iter().fold(seeds, |acc, map| {
+            acc.into_iter().map(|n| map.remap(&n)).collect()
+        })
+    }
+}
+
+impl<'a> From<Vec<Map<'a>>> for Almanac<'a> {
+    fn from(v: Vec<Map<'a>>) -> Self {
+        Self(v)
+    }
 }
 
 fn parse_map_header(input: &str) -> IResult<&str, (&str, &str)> {
@@ -41,9 +88,9 @@ fn parse_map_entry(input: &str) -> IResult<&str, MapEntry> {
     delimited(
         space0,
         tuple((
-            terminated(map_res(digit1, str::parse::<u32>), space1),
-            terminated(map_res(digit1, str::parse::<u32>), space1),
-            terminated(map_res(digit1, str::parse::<u32>), space0),
+            terminated(map_res(digit1, str::parse::<usize>), space1),
+            terminated(map_res(digit1, str::parse::<usize>), space1),
+            terminated(map_res(digit1, str::parse::<usize>), space0),
         )),
         space0,
     )(input)
@@ -76,18 +123,18 @@ fn parse_map<'a>(input: &'a str) -> IResult<&str, Map<'a>> {
     })
 }
 
-fn parse_seeds_to_plant(input: &str) -> IResult<&str, Vec<u32>> {
+fn parse_seeds_to_plant(input: &str) -> IResult<&str, Vec<usize>> {
     preceded(
         tag("seeds:"),
         many1(delimited(
             space0,
-            map_res(digit1, str::parse::<u32>),
+            map_res(digit1, str::parse::<usize>),
             space0,
         )),
     )(input)
 }
 
-fn parse_almanac(input: &str) -> IResult<&str, (Vec<u32>, Vec<Map>)> {
+fn parse_almanac(input: &str) -> IResult<&str, (Vec<usize>, Almanac)> {
     separated_pair(
         parse_seeds_to_plant,
         newline,
@@ -96,6 +143,7 @@ fn parse_almanac(input: &str) -> IResult<&str, (Vec<u32>, Vec<Map>)> {
             tuple((multispace0, eof)),
         ),
     )(input)
+    .map(|(rest, (seeds, maps))| (rest, (seeds, maps.into())))
 }
 
 #[cfg(test)]
@@ -213,6 +261,7 @@ mod tests {
                             ],
                         }
                     ]
+                    .into()
                 )
             ))
         );
@@ -254,6 +303,10 @@ mod tests {
         60 56 37
         56 93 4";
 
-        println!("{:?}", parse_almanac(example_almanac));
+        let (seeds, almanac) = parse_almanac(example_almanac).unwrap().1;
+
+        let locations = almanac.location_of_seeds(seeds);
+
+        assert_eq!(locations, vec![82, 43, 86, 35]);
     }
 }
