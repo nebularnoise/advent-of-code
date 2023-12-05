@@ -8,18 +8,33 @@ use nom::sequence::{delimited, preceded, separated_pair, terminated, tuple};
 use nom::IResult;
 
 use core::ops::Range;
+use itertools::Itertools;
 
 fn main() {
     let real_input = std::fs::read_to_string("./input.txt").unwrap();
 
     let (seeds, almanac) = parse_almanac(&real_input).unwrap().1;
 
-    let fully_transformed = almanac.location_of_seeds(seeds);
-
+    let locations_pt1 = almanac.location_of_seeds(seeds.clone());
     println!(
         "Pt1 - Lowest location number for a seed to plant: {}",
-        fully_transformed.iter().min().unwrap()
+        locations_pt1.iter().min().unwrap()
     );
+
+    let seeds = reinterpret_seed_list_as_ranges(seeds);
+    let locations_pt2 = almanac.location_of_seeds(seeds.into_iter().flatten().collect());
+    println!(
+        "Pt2 - Lowest location number for a seed to plant: {}",
+        locations_pt2.iter().min().unwrap()
+    );
+}
+
+fn reinterpret_seed_list_as_ranges(list: Vec<usize>) -> Vec<Range<usize>> {
+    list.into_iter()
+        .tuple_windows::<(_, _)>()
+        .step_by(2)
+        .map(|(a, b)| a..a + b)
+        .collect::<Vec<_>>()
 }
 
 #[derive(Debug, PartialEq)]
@@ -305,8 +320,10 @@ mod tests {
 
         let (seeds, almanac) = parse_almanac(example_almanac).unwrap().1;
 
-        let locations = almanac.location_of_seeds(seeds);
+        let locations_pt1 = almanac.location_of_seeds(seeds.clone());
+        assert_eq!(locations_pt1, vec![82, 43, 86, 35]);
 
-        assert_eq!(locations, vec![82, 43, 86, 35]);
+        let seeds_pt2 = reinterpret_seed_list_as_ranges(seeds);
+        assert_eq!(seeds_pt2.into_iter().flatten().count(), 27);
     }
 }
