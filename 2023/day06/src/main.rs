@@ -62,9 +62,73 @@
 // if delta is negative, there are no real solutions, only imaginary ones
 // if delta is equal to zero, the two roots t1 and t2 are equal
 
+use std::fs::File;
+use std::io::{self, BufRead};
 use std::ops::Range;
+use std::path::Path;
 
-fn main() {}
+fn main() {
+    let mut lines = read_lines("./input.txt").unwrap();
+
+    let times = lines.next().unwrap().unwrap();
+    let distances = lines.next().unwrap().unwrap();
+
+    let times = times
+        .chars()
+        .skip_while(|c| !c.is_ascii_digit())
+        .collect::<String>();
+    let distances = distances
+        .chars()
+        .skip_while(|c| !c.is_ascii_digit())
+        .collect::<String>();
+
+    let times: Vec<_> = times.split_ascii_whitespace().collect();
+    let distances: Vec<_> = distances.split_ascii_whitespace().collect();
+
+    let pt1_races: Vec<_> = times
+        .iter()
+        .zip(distances.iter())
+        .map(|(time, dist)| BoatRace {
+            current_record: dist.parse().unwrap(),
+            t_max: time.parse().unwrap(),
+        })
+        .collect();
+    println!(
+        "Pt 1 - product of all possible moves: {}",
+        pt1_races
+            .iter()
+            .filter_map(|r| r.winning_moves().map(|r| r.len()))
+            .product::<usize>(),
+    );
+
+    let pt2_race = BoatRace {
+        current_record: distances
+            .iter()
+            .flat_map(|s| s.chars())
+            .collect::<String>()
+            .parse::<usize>()
+            .unwrap(),
+        t_max: times
+            .iter()
+            .flat_map(|s| s.chars())
+            .collect::<String>()
+            .parse::<usize>()
+            .unwrap(),
+    };
+
+    println!(
+        "Pt 2 - ways to win long race: {}",
+        pt2_race.winning_moves().unwrap().len()
+    );
+}
+
+fn read_lines<P>(filename: P) -> io::Result<io::Lines<io::BufReader<File>>>
+where
+    P: AsRef<Path>,
+{
+    let file = File::open(filename)?;
+    Ok(io::BufReader::new(file).lines())
+}
 
 struct SecondDegreePolynomial {
     a: i64,
@@ -87,6 +151,7 @@ impl SecondDegreePolynomial {
 }
 
 const K: i64 = 1;
+#[derive(Debug)]
 struct BoatRace {
     t_max: usize,
     current_record: usize,
