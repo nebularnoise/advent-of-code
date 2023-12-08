@@ -11,7 +11,7 @@ fn main() {
     let input = std::fs::read_to_string("./input.txt").unwrap();
     let hands = many1(delimited(multispace0, parse_line, multispace0))(&input).unwrap();
 
-    let mut hands: Vec<_> = hands.1;
+    let mut hands: Vec<_> = hands.1.clone();
     hands.sort_unstable_by(|a, b| a.0.cmp(&b.0));
 
     let sum: usize = hands
@@ -21,6 +21,22 @@ fn main() {
         .sum();
 
     println!("Pt1 - Sum of all bids multiplied by ranking: {}", sum);
+
+    for (hand, _bid) in hands.iter_mut() {
+        for card in hand.cards.iter_mut() {
+            if card.0 == 'J' {
+                card.0 = 'X';
+            }
+        }
+    }
+    hands.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+    let sum: usize = hands
+        .iter()
+        .enumerate()
+        .map(|(i, (_h, bid))| bid * (i + 1))
+        .sum();
+
+    println!("Pt2 - Sum of all bids multiplied by ranking: {}", sum);
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -30,7 +46,7 @@ impl TryFrom<char> for Card {
     type Error = ();
     fn try_from(c: char) -> Result<Self, <Self as TryFrom<char>>::Error> {
         match c {
-            '2'..='9' | 'T' | 'J' | 'Q' | 'K' | 'A' => Ok(Card(c)),
+            '2'..='9' | 'T' | 'J' | 'Q' | 'K' | 'A' | 'X' => Ok(Card(c)),
             _ => Err(()),
         }
     }
@@ -61,7 +77,7 @@ impl Ord for Card {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 struct Hand {
     cards: [Card; 5],
 }
@@ -102,6 +118,16 @@ impl Hand {
         cards.sort();
         let mut cards: Vec<_> = cards.iter().dedup_with_count().collect();
         cards.sort_by_key(|(amount, _c)| *amount);
+        if let Some((index, (joker_amt, _j))) =
+            cards.iter().copied().find_position(|(_amt, c)| **c == 'X')
+        {
+            if cards.len() == 1 {
+                // jokers only, nothing to do
+            } else {
+                cards.remove(index);
+                cards.last_mut().unwrap().0 += joker_amt;
+            }
+        }
 
         cards
             .iter()
@@ -190,6 +216,60 @@ mod test {
         assert_eq!(
             Hand {
                 cards: [Card('2'), Card('2'), Card('K'), Card('Q'), Card('J')],
+            }
+            .hand_type(),
+            HandType::Pair
+        );
+        assert_eq!(
+            Hand {
+                cards: [Card('A'), Card('2'), Card('3'), Card('4'), Card('5')],
+            }
+            .hand_type(),
+            HandType::HighCard
+        );
+    }
+
+    #[test]
+    fn joker_hand_type() {
+        assert_eq!(
+            Hand {
+                cards: [Card('5'), Card('5'), Card('5'), Card('5'), Card('5')],
+            }
+            .hand_type(),
+            HandType::Five
+        );
+
+        assert_eq!(
+            Hand {
+                cards: [Card('4'), Card('4'), Card('4'), Card('4'), Card('X')],
+            }
+            .hand_type(),
+            HandType::Five
+        );
+        assert_eq!(
+            Hand {
+                cards: [Card('K'), Card('K'), Card('K'), Card('X'), Card('Q')],
+            }
+            .hand_type(),
+            HandType::Four
+        );
+        assert_eq!(
+            Hand {
+                cards: [Card('3'), Card('3'), Card('Q'), Card('Q'), Card('X')],
+            }
+            .hand_type(),
+            HandType::FullHouse
+        );
+        assert_eq!(
+            Hand {
+                cards: [Card('A'), Card('A'), Card('K'), Card('Q'), Card('X')],
+            }
+            .hand_type(),
+            HandType::Three
+        );
+        assert_eq!(
+            Hand {
+                cards: [Card('A'), Card('2'), Card('K'), Card('Q'), Card('X')],
             }
             .hand_type(),
             HandType::Pair
