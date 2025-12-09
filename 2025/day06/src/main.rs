@@ -45,6 +45,16 @@ fn main() -> std::result::Result<(), std::boxed::Box<dyn std::error::Error>> {
 
     println!("pt1: {}", pt1);
 
+    //=========
+    let mut op_widths: Vec<usize> = vec![0; operations_n];
+
+    let operators_line = lines.last().unwrap();
+
+    for (i, s) in operators_line.split(['*', '+']).skip(1).enumerate() {
+        op_widths[i] = s.len() + 1;
+    }
+
+    println!("{:?}", op_widths);
 
     Ok(())
 }
